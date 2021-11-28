@@ -1,10 +1,10 @@
 use crate::errors::ParseError;
 
-use crate::lexer::token::Token;
+use crate::frontend::lexer::token::Token;
 use crate::types::Type;
 
 // AST
-use crate::ast::*;
+use crate::backend::ast::*;
 
 pub struct Parser {
     position: usize,

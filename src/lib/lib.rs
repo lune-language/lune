@@ -1,6 +1,10 @@
-pub mod lexer;
-pub mod parser;
-pub mod ast;
+// Frontend stuff like lexing and parsing
+pub mod frontend;
+
+// Backend IR and code gen
+pub mod backend;
+
+// Errors
 pub mod errors;
 
 pub mod types {

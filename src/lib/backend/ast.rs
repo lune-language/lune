@@ -1,9 +1,10 @@
 /// AST nodes
+use std::fmt;
 
-use crate::lexer::token::Token;
+use crate::frontend::lexer::token::Token;
 use crate::types::Type;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Expr {
     IntLit(i32),
     StringLit(String),
@@ -20,7 +21,7 @@ pub struct Name {
     pub value: String
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Stmt {
     Expr(Expr),
     VarDeclaration(Name, Type, Expr),
@@ -34,4 +35,17 @@ pub trait Visitor<T> {
     fn visit_expr(&mut self, expr: &Expr) -> T;
     fn visit_stmt(&mut self, stmt: &Stmt) -> T;
     fn visit_name(&mut self, name: &Name) -> T;
+}
+
+impl fmt::Display for Expr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let result = match &*self {
+            Expr::IntLit(n) => write!(f, "{}", n),
+            Expr::StringLit(s) => write!(f, "\"{}\"", s),
+            Expr::BinOp(lhs, op, rhs) => write!(f, "{}{}{}", lhs, op, rhs),
+            Expr::UnaryOp(op, rhs) => write!(f, "{}{}", op, rhs),
+        };
+
+        result
+    }
 }

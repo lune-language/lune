@@ -2,7 +2,8 @@ use lazy_static::lazy_static;
 use std::collections::HashMap;
 use std::vec;
 
-use crate::lexer::token::Token;
+use crate::errors::LexerError;
+use super::token::Token;
 
 lazy_static! {
     static ref KEYWORDS: HashMap<&'static str, Token> = HashMap::from([
@@ -14,7 +15,6 @@ lazy_static! {
         ("proc", Token::Proc),
         ("ptr", Token::Ptr),
         ("var", Token::Var),
-
         ("int", Token::IntType),
         ("str", Token::StrType)
     ]);
@@ -69,7 +69,14 @@ impl Lexer<'_> {
 
     fn expect(&self, c: char, msg: &str) {
         if self.peek() != c {
-            panic!("{}", msg);
+            panic!(
+                "{}",
+                LexerError {
+                    position: self.position,
+                    line: self.line,
+                    message: msg.into()
+                }
+            )
         }
     }
 
@@ -81,8 +88,9 @@ impl Lexer<'_> {
             self.advance();
         }
 
-        let value = lexed.parse::<i32>()
-                         .expect("error: invalid integer literal");
+        let value = lexed
+            .parse::<i32>()
+            .expect("error: invalid integer literal");
 
         self.push(0, Token::IntLit(value));
     }
@@ -118,7 +126,7 @@ impl Lexer<'_> {
         //println!("lexed: {}", lexed);
         match KEYWORDS.get(lexed.as_str()) {
             Some(v) => self.push(0, v.clone()),
-            None => self.push(0, Token::Identifier(lexed))
+            None => self.push(0, Token::Identifier(lexed)),
         }
     }
 
@@ -175,10 +183,9 @@ impl Lexer<'_> {
                     self.advance();
                 }
 
-                (_, _) => self.advance()
+                (_, _) => self.advance(),
             }
         }
-        
         self.push(1, Token::Eof);
         self.tokens.clone()
     }
