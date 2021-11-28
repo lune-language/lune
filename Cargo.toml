@@ -10,7 +10,7 @@ path = "src/main.rs"
 name = "lune"
 
 [lib]
-path = "src/lib/lib.rs"
+path = "src/lang/lang.rs"
 name = "lune"
 
 [dependencies]

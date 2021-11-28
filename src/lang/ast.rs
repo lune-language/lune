@@ -1,8 +1,9 @@
 /// AST nodes
 
 use crate::lexer::token::Token;
+use crate::types::Type;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub enum Expr {
     IntLit(i32),
     StringLit(String),
@@ -16,13 +17,13 @@ pub enum Expr {
 
 #[derive(Debug, PartialEq)]
 pub struct Name {
-    value: String
+    pub value: String
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub enum Stmt {
     Expr(Expr),
-    VarDeclaration(Name, Expr),
+    VarDeclaration(Name, Type, Expr),
     Assignment(Name, Expr),
 }
 
