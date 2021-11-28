@@ -1,0 +1,26 @@
+# Grammar for Lune
+
+expression  ::= equality;
+
+literal     ::= <Number> | <String> | "null";
+equality    ::= comparison ( ("!=" | "==" ) comparison)*;
+comparison  ::= term ( (">" | ">=" | "<" | "<= ") term)*;
+
+# a term is zero or more factors
+term        ::= factor ( ("-" | "+") factor)*;
+factor      ::= unary ( ("*" | "/") unary)*;
+unary       ::= ("!" | "-") unary
+             | primary_expr;
+
+# variable declaration
+# TODO: add types
+var_declare ::= "var" <Identifier> "=" primary;
+
+primary     ::= literal 
+             | "(" expression ")";
+
+statement   ::= var_declare
+             | primary;
+
+# root node
+root        ::= statement*;
