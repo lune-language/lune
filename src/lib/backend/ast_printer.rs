@@ -1,5 +1,8 @@
 use super::ast::*;
 
+use serde_lexpr::{from_str, to_string};
+
+
 pub struct ASTPrinter {
 
 }
@@ -10,12 +13,7 @@ impl ASTPrinter {
         println!("{}\n", "AST print (S expressions):");
         println!("[");
         for (pos, stmt) in stmts.iter().enumerate() {
-            if pos > 0 {
-                println!(" {}", self.visit_stmt(&stmt));
-            }
-            else {
-                println!("{}", self.visit_stmt(&stmt));
-            }
+            println!("{}", self.visit_stmt(&stmt));
         }
         println!("]");
     }
@@ -38,8 +36,8 @@ impl Visitor<String> for ASTPrinter {
             Expr::IntLit(n) => n.to_string(),
             Expr::StringLit(s) => format!("\"{}\"", s),
 
-            Expr::BinOp(lhs, op, rhs) => format!("({} {} {})", op, lhs.clone(), rhs.clone()),
-            Expr::UnaryOp(op, rhs) => format!("({} {})", op, rhs.clone())
+            Expr::BinOp(lhs, op, rhs) => format!("({} {} {})", op.kind, lhs.clone(), rhs.clone()),
+            Expr::UnaryOp(op, rhs) => format!("({} {})", op.kind, rhs.clone())
         }
     }
 }

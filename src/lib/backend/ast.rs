@@ -4,6 +4,9 @@ use std::fmt;
 use crate::frontend::lexer::token::Token;
 use crate::types::Type;
 
+/// Type alias for AST
+pub type AST = Vec<Stmt>;
+
 #[derive(Debug, PartialEq)]
 pub enum Expr {
     IntLit(i32),
@@ -24,7 +27,13 @@ pub struct Name {
 #[derive(Debug, PartialEq)]
 pub enum Stmt {
     Expr(Expr),
+
+    /// Variable declaration
     VarDeclaration(Name, Type, Expr),
+
+    //IfStatement(Comparison, )
+
+    /// Assignment
     Assignment(Name, Expr),
 }
 
@@ -42,8 +51,8 @@ impl fmt::Display for Expr {
         let result = match &*self {
             Expr::IntLit(n) => write!(f, "{}", n),
             Expr::StringLit(s) => write!(f, "\"{}\"", s),
-            Expr::BinOp(lhs, op, rhs) => write!(f, "{}{}{}", lhs, op, rhs),
-            Expr::UnaryOp(op, rhs) => write!(f, "{}{}", op, rhs),
+            Expr::BinOp(lhs, op, rhs) => write!(f, "{}{}{}", lhs, op.kind, rhs),
+            Expr::UnaryOp(op, rhs) => write!(f, "{}{}", op.kind, rhs),
         };
 
         result

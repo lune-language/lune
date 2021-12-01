@@ -1,6 +1,6 @@
 use crate::errors::ParseError;
 
-use crate::frontend::lexer::token::Token;
+use crate::frontend::lexer::token::{Token, TokenKind};
 use crate::types::Type;
 
 // AST
@@ -15,22 +15,25 @@ impl Parser {
     pub fn new(tokens: Vec<Token>) -> Parser {
         Parser {
             position: 0,
-            tokens: tokens,
+            tokens,
         }
     }
 
     fn at_end(&self) -> bool {
-        self.peek() == Token::Eof
+        self.peek().kind == TokenKind::Eof
     }
 
+    /// Return the previous token
     fn prev(&self) -> Token {
         self.tokens.get(self.position - 1).unwrap().clone()
     }
 
+    /// Peek ahead and return the token 
     fn peek(&self) -> Token {
         self.tokens.get(self.position).unwrap().clone()
     }
 
+    /// Advance the position and return the previous token
     fn advance(&mut self) -> Token {
         if !self.at_end() {
             self.position += 1
@@ -38,45 +41,25 @@ impl Parser {
         self.prev()
     }
 
-    /// Check if the current token is the token we pass in, and consume it
-    fn consume(&mut self, token: &Token) -> Option<Token> {
-        if self.is_type(token) {
+    /// Consume the current token and return the next token
+    fn consume(&mut self, kind: TokenKind) -> Option<Token> {
+        if !self.at_end() && self.peek().kind == kind {
             Some(self.advance())
         } else {
             None
         }
     }
 
-    /// Check if the current token is the token we pass in, and consume it
-    fn consume_if(&mut self, f: impl FnOnce(&Token) -> bool) -> Option<Token> {
-        let token = self.tokens.get(self.position).unwrap();
-        if f(token) {
-            Some(self.advance())
-        } else {
-            None
-        }
-    }
-
-    /// Check if the current token is the token we pass in and
-    /// we are not at the end of the token stream.
-    fn is_type(&self, token: &Token) -> bool {
-        if self.at_end() {
-            return false;
-        }
-
-        self.peek() == *token
-    }
-
-    /// Check if the current token matches any of the tokens passed to
-    /// the function.
-    fn has_match(&mut self, tokens: &[Token]) -> bool {
-        for t in tokens {
-            if self.is_type(t) {
-                self.advance();
-                return true;
+    /// Return the matched token if there is one, otherwise return None
+    /// If we are at the end of the stream, just return None.
+    fn matches(&mut self, kinds: &[TokenKind]) -> Option<Token> {
+        for kind in kinds {
+            if !self.at_end() && self.peek().kind == *kind {
+                //self.advance();
+                return Some(self.peek());
             }
         }
-        false
+        None
     }
 
     /// Parsing
@@ -88,8 +71,7 @@ impl Parser {
     fn parse_equality(&mut self) -> Result<Expr, ParseError> {
         // equality ::= comparison ( ("!=" | "==") comparison)*
         let mut expr = self.parse_comparison()?;
-        while self.has_match(&[Token::BangEqual, Token::EqualEqual]) {
-            let op = self.prev();
+        while let Some(op) = self.matches(&[TokenKind::BangEqual, TokenKind::EqualEqual]) {
             let rhs = self.parse_comparison()?;
             expr = Expr::BinOp(Box::new(expr), op, Box::new(rhs));
         }
@@ -100,13 +82,12 @@ impl Parser {
     fn parse_comparison(&mut self) -> Result<Expr, ParseError> {
         // comparison ::= term ( (">" | ">=" | "<" | "<=") term)*
         let mut expr = self.parse_term()?;
-        while self.has_match(&[
-            Token::Greater,
-            Token::GreaterEqual,
-            Token::Less,
-            Token::LessEqual,
+        while let Some(op) = self.matches(&[
+            TokenKind::Greater,
+            TokenKind::GreaterEqual,
+            TokenKind::Less,
+            TokenKind::LessEqual,
         ]) {
-            let op = self.prev();
             let rhs = self.parse_term()?;
             expr = Expr::BinOp(Box::new(expr), op, Box::new(rhs));
         }
@@ -117,8 +98,7 @@ impl Parser {
     fn parse_term(&mut self) -> Result<Expr, ParseError> {
         // term ::= factor ( ("+" | "-") factor)*
         let mut expr = self.parse_factor()?;
-        while self.has_match(&[Token::Plus, Token::Minus]) {
-            let op = self.prev();
+        while let Some(op) = self.matches(&[TokenKind::Plus, TokenKind::Minus]) {
             let rhs = self.parse_factor()?;
             expr = Expr::BinOp(Box::new(expr), op, Box::new(rhs));
         }
@@ -129,8 +109,7 @@ impl Parser {
     fn parse_factor(&mut self) -> Result<Expr, ParseError> {
         // factor ::= unary ( ("*" | "/") unary)*
         let mut expr = self.parse_unary()?;
-        while self.has_match(&[Token::Star, Token::Slash]) {
-            let op = self.prev();
+        while let Some(op) = self.matches(&[TokenKind::Star, TokenKind::Slash]) {
             let rhs = self.parse_unary()?;
             expr = Expr::BinOp(Box::new(expr), op, Box::new(rhs));
         }
@@ -141,8 +120,7 @@ impl Parser {
     fn parse_unary(&mut self) -> Result<Expr, ParseError> {
         // unary ::= ("!" | "-") unary
         //        | primary
-        if self.has_match(&[Token::Bang, Token::Minus]) {
-            let op = self.prev();
+        if let Some(op) = self.matches(&[TokenKind::Bang, TokenKind::Minus]) {
             let rhs = self.parse_factor()?;
             return Ok(Expr::UnaryOp(op, Box::new(rhs)));
         }
@@ -151,11 +129,11 @@ impl Parser {
     }
 
     fn parse_primary(&mut self) -> Result<Expr, ParseError> {
-        if let Token::IntLit(n) = self.peek() {
+        if let TokenKind::IntLit(n) = self.peek().kind {
             self.advance();
             return Ok(Expr::IntLit(n));
         }
-        if let Token::StringLit(s) = self.peek() {
+        if let TokenKind::StringLit(s) = self.peek().kind {
             self.advance();
             return Ok(Expr::StringLit(s));
         }
@@ -173,26 +151,26 @@ impl Parser {
         let type_: Type;
         let mut value: Option<Expr> = None;
 
-        if let Some(Token::Identifier(ident)) =
-            self.consume_if(|token| matches!(token, Token::Identifier(_)))
-        {
-            name = ident.to_owned();
+        // Consume the identifier
+        match self.advance().kind {
+            TokenKind::Identifier(ident) => name = ident,
+            _ => {},
         }
 
-        match self.consume(&Token::Colon) {
+        match self.consume(TokenKind::Colon) {
             Some(_) => {}
             None => panic!("error: expected a colon"),
         }
 
-        match self.peek() {
-            Token::IntType => type_ = Type::Int,
-            Token::StrType => type_ = Type::String,
+        match self.peek().kind {
+            TokenKind::IntType => type_ = Type::Int,
+            TokenKind::StrType => type_ = Type::String,
             _ => panic!("error: invalid type"),
         }
 
         self.advance();
 
-        if matches!(self.peek(), Token::Equal) {
+        if matches!(self.peek().kind, TokenKind::Equal) {
             self.advance();
             value = Some(self.parse_expr()?);
         }
@@ -205,8 +183,8 @@ impl Parser {
     }
 
     pub fn parse_stmt(&mut self) -> Result<Stmt, ParseError> {
-        match self.peek() {
-            Token::Var => {
+        match self.peek().kind {
+            TokenKind::Var => {
                 self.advance();
                 return self.parse_var();
             }

@@ -2,170 +2,216 @@ use lazy_static::lazy_static;
 use std::collections::HashMap;
 use std::vec;
 
-use crate::errors::LexerError;
-use super::token::Token;
+//use crate::errors::LexerError;
+use super::token::{Token, TokenKind};
 
 lazy_static! {
-    static ref KEYWORDS: HashMap<&'static str, Token> = HashMap::from([
-        ("if", Token::If),
-        ("else", Token::Else),
-        ("for", Token::For),
-        ("while", Token::While),
-        ("case", Token::Case),
-        ("proc", Token::Proc),
-        ("ptr", Token::Ptr),
-        ("var", Token::Var),
-        ("int", Token::IntType),
-        ("str", Token::StrType)
+    static ref KEYWORDS: HashMap<&'static str, TokenKind> = HashMap::from([
+        ("if", TokenKind::If),
+        ("else", TokenKind::Else),
+        ("for", TokenKind::For),
+        ("while", TokenKind::While),
+        ("case", TokenKind::Case),
+        ("proc", TokenKind::Proc),
+        ("ptr", TokenKind::Ptr),
+        ("var", TokenKind::Var),
+        ("int", TokenKind::IntType),
+        ("str", TokenKind::StrType)
     ]);
 }
 
-pub struct Lexer<'a> {
+pub struct Lexer<'lex> {
     // start and current position in the stream
-    position: usize,
+    start: usize,
+    current: usize,
     line: usize,
-    src: &'a [u8],
+
+    source: &'lex str,
     pub tokens: Vec<Token>,
 }
 
-impl Lexer<'_> {
-    pub fn new(src: &str) -> Lexer {
+impl<'lex> Lexer<'lex> {
+    pub fn new(source: &str) -> Lexer {
         Lexer {
-            position: 0,
-            line: 1,
-            src: src.as_bytes(),
+            start: 0,
+            current: 0,
+            line: 0,
+
+            source,
             tokens: vec![],
         }
     }
 
+    fn at_end(&self) -> bool {
+        self.current >= self.source.len()
+    }
+
+    /// Peek ahead and return the character
     fn peek(&self) -> char {
-        if self.position >= self.src.len() {
-            return '\0';
-        }
-
-        self.src[self.position] as char
+        self.source.chars().nth(self.current).unwrap_or('\0')
     }
 
-    fn prev(&self) -> char {
-        self.src[self.position - 1] as char
+    /// Peek ahead by `ahead` characters and return the character
+    fn peek_next(&self, ahead: usize) -> char {
+        self.source
+            .chars()
+            .nth(self.current + ahead)
+            .unwrap_or('\0')
     }
 
-    fn next(&self, ahead: usize) -> char {
-        if self.position + ahead >= self.src.len() {
-            return '\0';
-        }
-
-        self.src[self.position + ahead] as char
-    }
-
+    /// Advance the lexer position
     fn advance(&mut self) {
-        self.position += 1
+        self.current += 1;
     }
 
-    fn push(&mut self, length: usize, tok: Token) {
-        self.tokens.push(tok);
-        self.position += length
+    /// Push a token of `kind` and advance the lexer by `length`
+    fn push(&mut self, length: usize, kind: TokenKind) {
+        self.tokens
+            .push(Token::of(kind, self.start, self.current, self.line));
+        self.current += length;
     }
 
     fn expect(&self, c: char, msg: &str) {
-        if self.peek() != c {
-            panic!(
-                "{}",
-                LexerError {
-                    position: self.position,
-                    line: self.line,
-                    message: msg.into()
-                }
-            )
+        if self.peek() != c {}
+    }
+
+    /// Scan hexadecimal format integers
+    fn scan_hex_int(&mut self) {
+        let hex_chars = "0123456789ABCDEFabcdef";
+
+        // Skip over 0x
+        self.advance();
+        self.advance();
+
+        while hex_chars.contains(self.peek()) {
+            self.advance();
         }
+
+        let lexed: String = self.source[self.start + 2..self.current].into();
+        self.push(
+            0,
+            TokenKind::IntLit(i32::from_str_radix(&lexed, 16).expect("failed to encode")),
+        );
+    }
+
+    /// Scan binary format integers
+    fn scan_bin_int(&mut self) {
+        let bin_chars = "01";
+
+        // Skip over 0b
+        self.advance();
+        self.advance();
+
+        while bin_chars.contains(self.peek()) {
+            self.advance();
+        }
+
+        let lexed: String = self.source[self.start + 2..self.current].into();
+        self.push(
+            0,
+            TokenKind::IntLit(i32::from_str_radix(&lexed, 2).expect("failed to encode")),
+        );
     }
 
     fn scan_int(&mut self) {
-        let mut lexed = String::new();
+        let mut has_radix = false;
 
+        if self.peek() == '0' {
+            self.advance();
+        }
+
+        // NOTE: should we support underscores in integer literals?
         while self.peek().is_ascii_digit() {
-            lexed.push(self.peek());
             self.advance();
         }
 
-        let value = lexed
-            .parse::<i32>()
-            .expect("error: invalid integer literal");
-
-        self.push(0, Token::IntLit(value));
-    }
-
-    fn scan_string(&mut self) {
-        // "hello world"
-        let mut lexed = String::new();
-        self.advance();
-
-        while self.peek() != '"' && self.position < self.src.len() {
-            match (self.peek(), self.next(1)) {
-                ('\\', 'n') => lexed.push('\n'),
-                ('\\', 't') => lexed.push('\t'),
-                ('\\', 'r') => lexed.push('\r'),
-                ('\\', '\\') => lexed.push('\\'),
-                (c, _) => lexed.push(c),
+        // Match on the radix
+        match self.peek() {
+            'b' => {
+                has_radix = true;
+                self.scan_bin_int()
             }
-            self.advance();
+            'x' => {
+                has_radix = true;
+                self.scan_hex_int()
+            }
+            _ => {}
         }
 
-        self.expect('"', "error: unexpected end of string");
-        self.push(2, Token::StringLit(lexed));
+        if !has_radix {
+            // Parse as decimal
+            let lexed: String = self.source[self.start..self.current].into();
+            self.push(
+                0,
+                TokenKind::IntLit(i32::from_str_radix(&lexed, 10).expect("failed to encode")),
+            );
+        }
     }
 
     fn scan_ident(&mut self) {
-        let mut lexed = String::new();
-
-        while self.peek().is_ascii_alphabetic() {
-            lexed.push(self.peek());
+        while self.peek().is_ascii_alphabetic() || self.peek() == '_' {
             self.advance();
         }
 
-        //println!("lexed: {}", lexed);
-        match KEYWORDS.get(lexed.as_str()) {
-            Some(v) => self.push(0, v.clone()),
-            None => self.push(0, Token::Identifier(lexed)),
+        let lexed: String = self.source[self.start..self.current].into();
+
+        match KEYWORDS.get(&*lexed) {
+            Some(k) => self.push(0, k.clone()),
+            None => self.push(0, TokenKind::Identifier(lexed)),
         }
     }
 
+    fn scan_string(&mut self) {
+        self.advance();
+        while self.peek() != '"' && !self.at_end() {
+            self.advance();
+        }
+
+        let lexed: String = self.source[self.start+1..self.current].into();
+
+        self.expect('"', "unexpected end of string");
+        self.push(2, TokenKind::StringLit(lexed));
+    }
+
     pub fn scan(&mut self) -> Vec<Token> {
-        while self.position < self.src.len() {
-            match (self.peek(), self.next(1)) {
-                ('(', _) => self.push(1, Token::LParen),
-                (')', _) => self.push(1, Token::RParen),
-                ('{', _) => self.push(1, Token::LBrace),
-                ('}', _) => self.push(1, Token::RBrace),
-                (',', _) => self.push(1, Token::Comma),
-                ('.', _) => self.push(1, Token::Dot),
-                ('+', '=') => self.push(2, Token::PlusEqual),
-                ('+', _) => self.push(1, Token::Plus),
-                ('-', '=') => self.push(2, Token::MinusEqual),
-                ('-', _) => self.push(1, Token::Minus),
-                ('*', _) => self.push(1, Token::Star),
-                ('/', _) => self.push(1, Token::Slash),
+        while !self.at_end() {
+            self.start = self.current;
 
-                (':', _) => self.push(1, Token::Colon),
-                ('!', '=') => self.push(2, Token::BangEqual),
-                ('=', '=') => self.push(2, Token::EqualEqual),
-                ('<', '=') => self.push(2, Token::LessEqual),
-                ('>', '=') => self.push(2, Token::GreaterEqual),
+            match (self.peek(), self.peek_next(1)) {
+                ('(', _) => self.push(1, TokenKind::LParen),
+                (')', _) => self.push(1, TokenKind::RParen),
+                ('{', _) => self.push(1, TokenKind::LBrace),
+                ('}', _) => self.push(1, TokenKind::RBrace),
+                (',', _) => self.push(1, TokenKind::Comma),
+                ('.', _) => self.push(1, TokenKind::Dot),
+                ('+', '=') => self.push(2, TokenKind::PlusEqual),
+                ('+', _) => self.push(1, TokenKind::Plus),
+                ('-', '=') => self.push(2, TokenKind::MinusEqual),
+                ('-', _) => self.push(1, TokenKind::Minus),
+                ('*', _) => self.push(1, TokenKind::Star),
+                ('/', _) => self.push(1, TokenKind::Slash),
 
-                ('=', _) => self.push(1, Token::Equal),
-                ('<', _) => self.push(1, Token::Less),
-                ('>', _) => self.push(1, Token::Greater),
+                (':', _) => self.push(1, TokenKind::Colon),
+                ('!', '=') => self.push(2, TokenKind::BangEqual),
+                ('=', '=') => self.push(2, TokenKind::EqualEqual),
+                ('<', '=') => self.push(2, TokenKind::LessEqual),
+                ('>', '=') => self.push(2, TokenKind::GreaterEqual),
+
+                ('=', _) => self.push(1, TokenKind::Equal),
+                ('<', _) => self.push(1, TokenKind::Less),
+                ('>', _) => self.push(1, TokenKind::Greater),
 
                 ('"', _) => self.scan_string(),
-                (d, _) if d.is_digit(10) => self.scan_int(),
                 (w, _) if w.is_whitespace() => self.advance(),
-                (id, _) if id.is_ascii_alphabetic() => self.scan_ident(),
+                (digit, _) if digit.is_digit(10) => self.scan_int(),
+                (ident, _) if ident.is_ascii_alphabetic() => self.scan_ident(),
 
                 // Comments
                 ('#', _) => {
-                    while self.peek() != '\n' && self.position < self.src.len() {
+                    while self.peek() != '\n' && !self.at_end() {
                         self.advance();
                     }
+
                     if self.peek() == '\n' {
                         self.advance();
                     }
@@ -173,20 +219,21 @@ impl Lexer<'_> {
                     self.line += 1;
                 }
 
-                // Newlines and continuations
+                // Newlines
                 ('\n', _) => {
-                    self.push(1, Token::NewLine);
+                    self.push(1, TokenKind::NewLine);
                     self.line += 1;
-                }
-                ('\\', '\n') => {
-                    self.line += 1;
-                    self.advance();
                 }
 
+                ('\\', '\n') => {
+                    // Continuation, just advance
+                    self.advance();
+                    self.line += 1;
+                }
                 (_, _) => self.advance(),
             }
         }
-        self.push(1, Token::Eof);
+        self.push(1, TokenKind::Eof);
         self.tokens.clone()
     }
 }

@@ -7,6 +7,7 @@ pub mod backend;
 // Errors
 pub mod errors;
 
+
 pub mod types {
     /// Enum of supported types
     #[derive(Debug, PartialEq)]

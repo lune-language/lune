@@ -13,12 +13,13 @@ unary       ::= ("!" | "-") unary
              | primary_expr;
 
 # variable declaration
-# TODO: add types
-var_declare ::= "var" <Identifier> "=" primary;
+var_declare ::= "var" <Identifier> : <Type> "=" primary;
+if_statement ::= "if" equality "{" block "}" "else" "{" block "}"; 
 
 primary     ::= literal 
              | "(" expression ")";
 
+block       ::= statement*;
 statement   ::= var_declare
              | primary;
 
