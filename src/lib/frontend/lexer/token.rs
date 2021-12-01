@@ -1,8 +1,6 @@
 use std::fmt;
 
-use serde_derive::{Serialize, Deserialize};
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
     LParen,
     RParen,
@@ -51,7 +49,7 @@ pub enum TokenKind {
     Eof,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Token {
     pub kind: TokenKind,
     pub start: usize,
